@@ -1,0 +1,103 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model AppSettings {
+  id                  String   @id @default(cuid())
+  shop                String   @unique
+  defaultLanguage     String   @default("en")
+  tone                String   @default("professional")
+  contentCategory     String   @default("general")
+  brandDescription    String?
+  includeBrandName    Boolean  @default(false)
+  targetKeywords      String?  // comma-joined
+  forbiddenWords      String?  // comma-joined
+  autoGenerateOnSync  Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
+}
+
+model ShopBilling {
+  id                    String    @id @default(cuid())
+  shop                  String    @unique
+  planTier              String    @default("free")
+  creditBalance         Int       @default(30)
+  creditsGrantedTotal   Int       @default(30)
+  cycleStartedAt        DateTime  @default(now())
+  shopifySubscriptionId String?
+  updatedAt             DateTime  @updatedAt
+}
+
+model ProductImage {
+  id              String   @id @default(cuid())
+  shop            String
+  shopifyImageId  String
+  shopifyProductId String
+  productTitle    String
+  productHandle   String
+  productStatus   String
+  productVendor   String?
+  imageUrl        String
+  altText         String?
+  status          String   @default("not_generated") // not_generated | processing | completed | failed
+  updatedAt       DateTime @updatedAt
+
+  @@unique([shop, shopifyImageId])
+  @@index([shop])
+}
+
+model OtherImage {
+  id             String   @id @default(cuid())
+  shop           String
+  shopifyFileId  String
+  fileName       String?
+  imageUrl       String
+  altText        String?
+  status         String   @default("not_generated")
+  updatedAt      DateTime @updatedAt
+
+  @@unique([shop, shopifyFileId])
+  @@index([shop])
+}
+
+model GenerationJob {
+  id              String    @id @default(cuid())
+  shop            String
+  kind            String    // sync | ai_generate
+  imagesTotal     Int       @default(0)
+  imagesSucceeded Int       @default(0)
+  imagesFailed    Int       @default(0)
+  creditsUsed     Int       @default(0)
+  status          String    @default("running") // running | completed | failed
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([shop])
+}

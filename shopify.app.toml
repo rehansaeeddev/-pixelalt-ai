@@ -1,0 +1,36 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "63f073a63bba7e64efb84b262aa81c63"
+application_url = "https://example.com"
+embedded = true
+name = "PixelAlt AI"
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/products/create"
+  topics = [ "products/create" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app_subscriptions/update"
+  topics = [ "app_subscriptions/update" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "write_files,write_products"
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
