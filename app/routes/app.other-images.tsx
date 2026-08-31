@@ -1,15 +1,17 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Form, useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppButton } from "../components/AppButton";
 import { Card, StatTile } from "../components/Card";
+import { PageHeader } from "../components/PageHeader";
 import { Pagination } from "../components/Pagination";
 import { StatusBadge } from "../components/StatusBadge";
 import { Choice } from "../components/PolarisChoice";
 import { EmptyState } from "../components/EmptyState";
 import { useToast } from "../components/Toast";
+import { useFetcherToast } from "../hooks/useFetcherToast";
 import prisma from "../db.server";
 import { syncOtherImages } from "../lib/sync-images.server";
 import { generateAltText, generateTemplateAltText } from "../lib/alt-text-generator.server";
@@ -171,24 +173,12 @@ export default function OtherImages() {
   const isSyncing = syncFetcher.state !== "idle";
   const isGenerating = generateFetcher.state !== "idle";
 
-  useEffect(() => {
-    if (syncFetcher.data && syncFetcher.state === "idle") {
-      showToast(`Sync complete — ${syncFetcher.data.synced} images synced.`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncFetcher.data]);
-
-  useEffect(() => {
-    if (generateFetcher.data && generateFetcher.state === "idle") {
-      const { succeeded, failed } = generateFetcher.data;
-      showToast(
-        succeeded === 1 && failed === 0
-          ? "Alt tag generated."
-          : `Generated ${succeeded} alt tag${succeeded === 1 ? "" : "s"}${failed > 0 ? `, ${failed} failed` : ""}.`,
-      );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generateFetcher.data]);
+  useFetcherToast(syncFetcher, (data) => `Sync complete — ${data.synced} images synced.`);
+  useFetcherToast(generateFetcher, ({ succeeded, failed }) =>
+    succeeded === 1 && failed === 0
+      ? "Alt tag generated."
+      : `Generated ${succeeded} alt tag${succeeded === 1 ? "" : "s"}${failed > 0 ? `, ${failed} failed` : ""}.`,
+  );
 
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -215,12 +205,19 @@ export default function OtherImages() {
   };
 
   return (
-    <s-page heading="Other Images">
-      <s-button slot="primary-action" variant="primary" icon="refresh" disabled={isSyncing} onClick={startSync}>
-        {isSyncing ? "Syncing..." : "Sync Images"}
-      </s-button>
-      <s-button slot="secondary-actions" href="/app/job-history" variant="secondary" icon="clock">Job history</s-button>
-      <s-button slot="secondary-actions" href="/app/pricing" variant="secondary" icon="credit-card">Buy credits</s-button>
+    <s-page>
+      <PageHeader
+        title="Other Images"
+        actions={
+          <>
+            <AppButton href="/app/job-history" variant="secondary">Job history</AppButton>
+            <AppButton href="/app/pricing" variant="secondary">Buy credits</AppButton>
+            <s-button variant="primary" icon="refresh" disabled={isSyncing} onClick={startSync}>
+              {isSyncing ? "Syncing..." : "Sync Images"}
+            </s-button>
+          </>
+        }
+      />
       <s-paragraph>Non-product images from your Shopify Files — banners, theme assets, and more.</s-paragraph>
 
       <div className="app-card-row" style={{ marginTop: "1.25rem", marginBottom: "1.25rem" }}>

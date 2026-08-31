@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useFetcher, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -8,6 +8,7 @@ import { Card, StatTile } from "../components/Card";
 import { DashboardHeader } from "../components/DashboardHeader";
 import { GettingStarted } from "../components/GettingStarted";
 import { useToast } from "../components/Toast";
+import { useFetcherToast } from "../hooks/useFetcherToast";
 import { Choice } from "../components/PolarisChoice";
 import prisma from "../db.server";
 import { syncProductImages, syncOtherImages } from "../lib/sync-images.server";
@@ -89,12 +90,7 @@ export default function Dashboard() {
   const isSyncing = syncFetcher.state !== "idle";
   const withAltPercent = totalImages > 0 ? Math.round((withAltText / totalImages) * 100) : 0;
 
-  useEffect(() => {
-    if (syncFetcher.data && syncFetcher.state === "idle") {
-      showToast(`Resync complete — ${syncFetcher.data.synced} images synced.`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [syncFetcher.data]);
+  useFetcherToast(syncFetcher, (data) => `Resync complete — ${data.synced} images synced.`);
 
   const startSync = () => {
     const formData = new FormData();

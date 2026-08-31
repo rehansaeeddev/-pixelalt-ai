@@ -18,3 +18,16 @@ export const PLAN_PRICE_LABEL: Record<string, string> = {
   growth: "$499/year",
   scale: "$990/year",
 };
+
+export const PLAN_ANNUAL_PRICE: Record<string, number> = {
+  starter: 99,
+  growth: 499,
+  scale: 990,
+};
+
+// What the same credits would cost bought as one-time top-ups — used to show the annual-plan savings.
+export const PLAN_ONE_TIME_PRICE: Record<string, number> = {
+  starter: 120,
+  growth: 600,
+  scale: 2400,
+};

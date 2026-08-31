@@ -1,11 +1,13 @@
 import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useState } from "react";
 import { Form, redirect, useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { Card, StatTile } from "../components/Card";
+import { Card } from "../components/Card";
 import { AppButton } from "../components/AppButton";
+import prisma from "../db.server";
 import { getBillingAccount } from "../lib/billing.server";
-import { PLAN_CREDITS, PLAN_LABELS, PLAN_PRICE_LABEL } from "../lib/plan-options";
+import { PLAN_CREDITS, PLAN_LABELS, PLAN_ANNUAL_PRICE, PLAN_ONE_TIME_PRICE } from "../lib/plan-options";
 import { requestPlanSubscription, requestCreditsTopUp, reconcileActiveSubscription, grantToppedUpCredits } from "../lib/shopify-billing.server";
 
 const PLAN_TIERS = ["starter", "growth", "scale"] as const;
@@ -33,16 +35,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const billing = await getBillingAccount(session.shop);
+  const totalImages = await prisma.productImage.count({ where: { shop: session.shop } });
 
-  const daysSinceCycleStart = Math.max(
-    1,
-    (Date.now() - new Date(billing.cycleStartedAt).getTime()) / (1000 * 60 * 60 * 24),
-  );
-  const creditsUsed = billing.creditsGrantedTotal - billing.creditBalance;
-  const dailyRate = creditsUsed / daysSinceCycleStart;
-  const creditsRunwayDays = dailyRate > 0 ? Math.ceil(billing.creditBalance / dailyRate) : null;
-
-  return { billing, creditsRunwayDays };
+  return { billing, totalImages };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -69,47 +64,104 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Pricing() {
-  const { billing, creditsRunwayDays } = useLoaderData<typeof loader>();
+  const { billing, totalImages } = useLoaderData<typeof loader>();
+  const [interval, setInterval] = useState<"monthly" | "annual">("annual");
+
+  const regensPerYear = totalImages > 0 ? Math.round(PLAN_CREDITS.starter / totalImages) : null;
 
   return (
     <s-page heading="Pricing">
       <s-paragraph>Choose a plan that fits your catalog — or top up credits whenever you need.</s-paragraph>
 
-      <div className="app-card-row" style={{ marginTop: "1.25rem", marginBottom: "1.25rem" }}>
-        <StatTile icon="reward" label="Plan" value={PLAN_LABELS[billing.planTier] ?? billing.planTier} />
-        <StatTile icon="credit-card" label="Credits remaining" value={String(billing.creditBalance)} />
-        <StatTile icon="chart-line" label="Credits granted this cycle" value={String(billing.creditsGrantedTotal)} />
-        <StatTile
-          icon="chart-line"
-          label="Credits runway"
-          value={creditsRunwayDays !== null ? `~${creditsRunwayDays} day${creditsRunwayDays === 1 ? "" : "s"}` : "No usage yet"}
-        />
+      {totalImages > 0 && regensPerYear ? (
+        <Card>
+          <s-stack direction="inline" gap="base" alignItems="center">
+            <s-icon type="chart-line" />
+            <div>
+              <s-text type="strong">Your store has {totalImages} images.</s-text>
+              <br />
+              <s-text color="subdued">Starter covers a full re-generation of your catalog {regensPerYear}× per year.</s-text>
+            </div>
+          </s-stack>
+        </Card>
+      ) : null}
+
+      <Card>
+        <s-stack direction="inline" gap="base" alignItems="center">
+          <s-icon type="apps" />
+          <div>
+            <s-text type="strong">{billing.planTier === "free" ? "Pick a plan to get started" : "Manage your plan"}</s-text>
+            <br />
+            <s-text color="subdued">You have {billing.creditBalance} credits. Choose a plan below to top up monthly.</s-text>
+          </div>
+        </s-stack>
+      </Card>
+
+      <div className="app-billing-toggle">
+        <button type="button" className={interval === "monthly" ? "app-billing-toggle__btn app-billing-toggle__btn--active" : "app-billing-toggle__btn"} onClick={() => setInterval("monthly")}>
+          Monthly
+        </button>
+        <button type="button" className={interval === "annual" ? "app-billing-toggle__btn app-billing-toggle__btn--active" : "app-billing-toggle__btn"} onClick={() => setInterval("annual")}>
+          Annual <span className="app-billing-toggle__badge">Save 2 months</span>
+        </button>
       </div>
 
-      <div className="app-card-row">
-        {PLAN_TIERS.map((tier) => (
-          <Card key={tier} heading={PLAN_LABELS[tier]}>
-            <h3>{PLAN_PRICE_LABEL[tier]}</h3>
-            <s-paragraph>{PLAN_CREDITS[tier].toLocaleString()} credits/yr</s-paragraph>
-            <ul>
-              {PLAN_FEATURES[tier].map((feature) => (
-                <li key={feature}>{feature}</li>
-              ))}
-            </ul>
-            <Form method="post">
-              <input type="hidden" name="intent" value="switch-plan" />
-              <input type="hidden" name="planTier" value={tier} />
-              <AppButton type="submit" variant={billing.planTier === tier ? "secondary" : "primary"} disabled={billing.planTier === tier}>
-                {billing.planTier === tier ? "Current plan" : `Choose ${PLAN_LABELS[tier]}`}
-              </AppButton>
-            </Form>
-          </Card>
-        ))}
+      <div className="app-plan-cards">
+        {PLAN_TIERS.map((tier) => {
+          const annualPrice = PLAN_ANNUAL_PRICE[tier];
+          const monthlyEquivalent = annualPrice / 12;
+          const displayedPrice = interval === "annual" ? annualPrice : Math.ceil(monthlyEquivalent * 1.2);
+          const savings = PLAN_ONE_TIME_PRICE[tier] - annualPrice;
+          const isCurrent = billing.planTier === tier;
+
+          return (
+            <div key={tier} className={`app-plan-card${tier === "growth" ? " app-plan-card--popular" : ""}`}>
+              {tier === "growth" ? <span className="app-plan-card__ribbon app-plan-card__ribbon--popular">Most popular</span> : null}
+              {tier === "scale" ? <span className="app-plan-card__ribbon app-plan-card__ribbon--save">Save ≈50%</span> : null}
+
+              <s-text type="strong">{PLAN_LABELS[tier]}</s-text>
+              <div className="app-plan-card__price">
+                <span className="app-plan-card__price-currency">$</span>
+                <span className="app-plan-card__price-amount">{displayedPrice}</span>
+                <span className="app-plan-card__price-period">/{interval === "annual" ? "year" : "mo"}</span>
+              </div>
+              <s-text color="subdued">
+                {PLAN_CREDITS[tier].toLocaleString()} credits/yr · ${monthlyEquivalent.toFixed(2)}/mo
+              </s-text>
+
+              {interval === "annual" ? (
+                <div className="app-plan-card__savings">
+                  <s-icon type="check-circle" tone="success" size="small" /> Save ${savings.toFixed(2)} / year vs one-time
+                </div>
+              ) : null}
+
+              <ul className="app-plan-card__features">
+                {PLAN_FEATURES[tier].map((feature) => (
+                  <li key={feature}>
+                    <s-icon type="check" size="small" /> {feature}
+                  </li>
+                ))}
+              </ul>
+
+              <Form method="post">
+                <input type="hidden" name="intent" value="switch-plan" />
+                <input type="hidden" name="planTier" value={tier} />
+                <AppButton
+                  type="submit"
+                  variant={tier === "growth" ? "gradient" : "primary"}
+                  disabled={isCurrent}
+                >
+                  {isCurrent ? "Current plan" : tier === "growth" ? "Upgrade to Growth" : `Choose ${PLAN_LABELS[tier]}`}
+                </AppButton>
+              </Form>
+            </div>
+          );
+        })}
       </div>
 
-      <s-paragraph>
-        Just exploring? You&apos;re on the Free plan with 30 credits/month until you upgrade.
-      </s-paragraph>
+      <p className="app-pricing-footnote">
+        Just exploring? <span className="app-upgrade-link">You&apos;re already on Free — 30 credits/month</span>
+      </p>
 
       <Card heading="Need extra credits this month?">
         <s-paragraph>Buy a one-time credit pack on top of your plan.</s-paragraph>
@@ -121,11 +173,20 @@ export default function Pricing() {
         </Form>
       </Card>
 
-      <Card heading="FAQ">
-        <p><strong>What&apos;s a credit?</strong> One credit = one image alt-text generation. Manual edits are free.</p>
-        <p><strong>Do credits expire?</strong> Plan credits reset on your next billing cycle. Top-up credits never expire.</p>
-        <p><strong>Can I switch plans?</strong> Yes — upgrade anytime, your credits carry over.</p>
-      </Card>
+      <div className="app-faq-grid">
+        <Card>
+          <s-text type="strong">What&apos;s a credit?</s-text>
+          <s-paragraph>One credit = one image alt-text generation. Edits and template-based generation are free.</s-paragraph>
+        </Card>
+        <Card>
+          <s-text type="strong">Do credits expire?</s-text>
+          <s-paragraph>Plan credits reset monthly. Top-up credits never expire and roll over indefinitely.</s-paragraph>
+        </Card>
+        <Card>
+          <s-text type="strong">Can I switch plans?</s-text>
+          <s-paragraph>Yes. Upgrade anytime — your existing credits carry over. Downgrades take effect next cycle.</s-paragraph>
+        </Card>
+      </div>
     </s-page>
   );
 }
